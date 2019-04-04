@@ -6,22 +6,24 @@ using System.Linq;
 using System.Media;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using IllusionPlugin;
 using System.Reflection;
+using IPA;
 using BS_Utils.Gameplay;
+using IPALogger = IPA.Logging.Logger;
 
 namespace BeatSaberDataWrappers
 {
+    internal static class Logger
+    {
+        public static IPALogger log { get; set; }
+    }
     /// <summary>
     /// Main Plugin class that handles updates to Data.
     /// Large portions of this code taken from the BeatSaberHTTPStatus mod.
     /// Link: https://github.com/opl-/beatsaber-http-status
     /// </summary>
-    public class Plugin : IPlugin
+    public class Plugin : IBeatSaberPlugin
     {
-        public string Name => Constants.Name;
-        public string Version => Constants.Version;
-
         private bool headInObstacle = false;
 
         private GameplayCoreSceneSetupData gameplayCoreSceneSetupData;
@@ -46,12 +48,56 @@ namespace BeatSaberDataWrappers
         /// private static LevelCompletionResults.Rank LevelCompletionResults.GetRankForScore(int score, int maxPossibleScore)
         private MethodInfo getRankForScoreMethod = typeof(LevelCompletionResults).GetMethod("GetRankForScore", BindingFlags.NonPublic | BindingFlags.Static);
 
-        public void OnApplicationStart()
+        public void Init(object willBeNull, IPALogger logger)
         {
-            SceneManager.activeSceneChanged += SceneManagerOnActiveSceneChanged;
+            Logger.log = logger;
         }
 
-        private void SceneManagerOnActiveSceneChanged(Scene oldScene, Scene newScene)
+        public void OnApplicationStart()
+        {
+            Logger.log.Debug("OnApplicationStart");
+        }
+
+        public void OnApplicationQuit()
+        {
+            Logger.log.Debug("OnApplicationQuit");
+
+            if (gamePauseManager != null)
+            {
+                RemoveSubscriber(gamePauseManager, "_gameDidPauseSignal", OnGamePause);
+                RemoveSubscriber(gamePauseManager, "_gameDidResumeSignal", OnGameResume);
+            }
+
+            if (scoreController != null)
+            {
+                scoreController.noteWasCutEvent -= OnNoteWasCut;
+                scoreController.noteWasMissedEvent -= OnNoteWasMissed;
+                scoreController.scoreDidChangeEvent -= OnScoreDidChange;
+                scoreController.comboDidChangeEvent -= OnComboDidChange;
+                scoreController.multiplierDidChangeEvent -= OnMultiplierDidChange;
+            }
+
+            if (gameplayManager != null)
+            {
+                RemoveSubscriber(gameplayManager, "_levelFinishedSignal", OnLevelFinished);
+                RemoveSubscriber(gameplayManager, "_levelFailedSignal", OnLevelFailed);
+            }
+
+            if (beatmapObjectCallbackController != null)
+            {
+                beatmapObjectCallbackController.beatmapEventDidTriggerEvent -= OnBeatmapEventDidTrigger;
+            }
+        }
+
+        public void OnSceneLoaded(Scene scene, LoadSceneMode sceneMode)
+        {
+        }
+
+        public void OnSceneUnloaded(Scene scene)
+        {
+        }
+
+        public void OnActiveSceneChanged(Scene oldScene, Scene newScene)
         {
             Data.scene = newScene.name;
 
@@ -86,6 +132,7 @@ namespace BeatSaberDataWrappers
                 playerHeadAndObstacleInteraction = FindFirstOrDefault<PlayerHeadAndObstacleInteraction>();
                 gameEnergyCounter = FindFirstOrDefault<GameEnergyCounter>();
 
+
                 gameplayCoreSceneSetupData = BS_Utils.Plugin.LevelData.GameplayCoreSceneSetupData;
 
                 // Register event listeners
@@ -112,9 +159,6 @@ namespace BeatSaberDataWrappers
 
                 IDifficultyBeatmap diff = gameplayCoreSceneSetupData.difficultyBeatmap;
                 IBeatmapLevel level = diff.level;
-
-                Data.partyMode = Gamemode.IsPartyActive;
-                Data.mode = Gamemode.GameMode;
 
                 GameplayModifiers gameplayModifiers = gameplayCoreSceneSetupData.gameplayModifiers;
                 PlayerSpecificSettings playerSettings = gameplayCoreSceneSetupData.playerSpecificSettings;
@@ -204,37 +248,6 @@ namespace BeatSaberDataWrappers
                 Data.advancedHUD = playerSettings.advancedHud;
 
                 Data.StatusChange(ChangedProperties.AllButNoteCut, "songStart");
-            }
-        }
-
-        public void OnApplicationQuit()
-        {
-            SceneManager.activeSceneChanged -= SceneManagerOnActiveSceneChanged;
-
-            if (gamePauseManager != null)
-            {
-                RemoveSubscriber(gamePauseManager, "_gameDidPauseSignal", OnGamePause);
-                RemoveSubscriber(gamePauseManager, "_gameDidResumeSignal", OnGameResume);
-            }
-
-            if (scoreController != null)
-            {
-                scoreController.noteWasCutEvent -= OnNoteWasCut;
-                scoreController.noteWasMissedEvent -= OnNoteWasMissed;
-                scoreController.scoreDidChangeEvent -= OnScoreDidChange;
-                scoreController.comboDidChangeEvent -= OnComboDidChange;
-                scoreController.multiplierDidChangeEvent -= OnMultiplierDidChange;
-            }
-
-            if (gameplayManager != null)
-            {
-                RemoveSubscriber(gameplayManager, "_levelFinishedSignal", OnLevelFinished);
-                RemoveSubscriber(gameplayManager, "_levelFailedSignal", OnLevelFailed);
-            }
-
-            if (beatmapObjectCallbackController != null)
-            {
-                beatmapObjectCallbackController.beatmapEventDidTriggerEvent -= OnBeatmapEventDidTrigger;
             }
         }
 
@@ -466,7 +479,7 @@ namespace BeatSaberDataWrappers
 
         private static void Log(string msg)
         {
-            BS_Utils.Utilities.Logger.Log(Constants.Name, msg);
+            Logger.log.Debug(msg);
         }
 
         public void OnUpdate()
@@ -490,14 +503,6 @@ namespace BeatSaberDataWrappers
 
                 Data.StatusChange(ChangedProperties.Performance, "obstacleExit");
             }
-        }
-
-        public void OnLevelWasLoaded(int level)
-        {
-        }
-
-        public void OnLevelWasInitialized(int level)
-        {
         }
 
         public void OnFixedUpdate()

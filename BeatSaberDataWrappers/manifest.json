@@ -1,0 +1,12 @@
+﻿{
+	"$schema": "https://raw.githubusercontent.com/nike4613/ModSaber-MetadataFileSchema/master/Schema.json",
+	"author": "Sc2ad",
+	"description": "A mod to wrap useful data into a static class called Data.",
+	"gameVersion": "0.13.1",
+	"id": "data-wrappers",
+	"name": "BS Data Wrappers",
+	"version": "0.0.2",
+	"features": [
+		"no-update"
+	]
+}
